@@ -19,7 +19,7 @@ Pod::Spec.new do |s|
     LICENSE
   }
   s.platform     = :osx
-  s.source_files = './*.{h,m}'
+  s.source_files = '*.{h,m}'
   s.description  = <<-DESC
     GCDTask is a wrapper for NSTask that allows for handling input, output and error streams just by providing a block to handle it.
      DESC
