@@ -29,4 +29,4 @@ Example usage:
 
 ## License
 
-View the LICENCE file for more info.
+View the LICENSE file for more info.
