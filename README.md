@@ -1,6 +1,6 @@
 GCDTask is a wrapper for NSTask that allows for handling input, output and error streams just by providing a block to handle it.
 
-# GCDTask — NSTask with a hint of GCD block magic.
+# GCDTask — NSTask with blocks and GCD.
 
 **GCDTask** is a wrapper for `NSTask` that tries to use GCD as much as possible and provide a simple block-based interface for use.
 
