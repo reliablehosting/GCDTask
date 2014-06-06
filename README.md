@@ -20,7 +20,7 @@ Example usage:
         NSString* output = [[NSString alloc] initWithData:stdErrData encoding:NSUTF8StringEncoding];
         NSLog(@"ERR: %@", output);
     } onLaunch:^{
-        NSLog(@"Task is has started running.");
+        NSLog(@"Task has started running.");
     } onExit:^{
         NSLog(@"Task has now quit.");
     }];
