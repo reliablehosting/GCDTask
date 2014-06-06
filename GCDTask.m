@@ -30,8 +30,13 @@
     executingTask = [[NSTask alloc] init];
  
     /* Set launch path. */
-    [executingTask setLaunchPath:_launchPath];
+    [executingTask setLaunchPath:[_launchPath stringByStandardizingPath]];
     
+    if (![[NSFileManager defaultManager] isExecutableFileAtPath:[executingTask launchPath]])
+    {
+        @throw [NSException exceptionWithName:@"GCDTASK_INVALID_EXECUTABLE" reason:@"There is no executable at the path set." userInfo:nil];
+    }
+
     /* Set arguments. */
     [executingTask setArguments:_arguments];
     
