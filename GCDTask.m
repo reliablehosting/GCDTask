@@ -6,21 +6,9 @@
 //
 
 #import "GCDTask.h"
+#define GCDTASK_BUFFER_MAX 1024
 
 @implementation GCDTask
-
-- (id) init
-{
-    /* Check for a runloop. If it doesn't exist, throw an exception. */
-    /* TODO: Attempt to read the file handle on GCD only if there is no run loop. We should support dispatch_main() only applications anyway, that's true GCD. */
-    if([NSRunLoop currentRunLoop] == nil)
-    {
-        @throw [NSException exceptionWithName:@"GCDTASK_NO_RUNLOOP" reason:@"No run loop was detected. If you are using this in a terminal application or daemon, ensure you're using CFRunLoopRun() over dispatch_main()." userInfo:nil];
-    }
-    
-    return [super init];
-    
-}
 
 - (void) launchWithOutputBlock: (void (^)(NSData* stdOutData)) stdOut
                  andErrorBlock: (void (^)(NSData* stdErrData)) stdErr
@@ -52,7 +40,8 @@
             break;
         }
     }
-
+    
+    
     [executingTask setArguments:_arguments];
     
     
@@ -63,72 +52,90 @@
     
     [executingTask setStandardInput:stdinPipe];
     [executingTask setStandardOutput:stdoutPipe];
-    [executingTask setStandardError:stderrPipe];
+    [executingTask setStandardError:stdoutPipe];
     
     /* Set current directory, just pass on our actual CWD. */
     /* TODO: Potentially make this changeable? Surely there's probably a nicer way to get the CWD too. */
     [executingTask setCurrentDirectoryPath:[[[NSFileManager alloc] init] currentDirectoryPath]];
 
     
-    stdoutObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSFileHandleDataAvailableNotification object:[stdoutPipe fileHandleForReading] queue:nil usingBlock:^(NSNotification *note)
-    {
-        NSFileHandle* outHandle = (NSFileHandle*) [note object];
-        NSData* data = [outHandle availableData];
+    /* Ensure the pipes are non-blocking so GCD can read them correctly. */
+    fcntl([stdoutPipe fileHandleForReading].fileDescriptor, F_SETFL, O_NONBLOCK);
+    fcntl([stderrPipe fileHandleForReading].fileDescriptor, F_SETFL, O_NONBLOCK);
+    
+    /* Setup a dispatch source for both descriptors. */
+    _stdoutSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ,[stdoutPipe fileHandleForReading].fileDescriptor, 0, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0));
+    _stderrSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ,[stderrPipe fileHandleForReading].fileDescriptor, 0, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0));
+    
+    /* Set stdout source event handler to read data and send it out. */
+    dispatch_source_set_event_handler(_stdoutSource, ^ {
+        size_t estimatedBlockSize = dispatch_source_get_data(_stdoutSource);
+        ssize_t bytesRead;
         
-        if([data length])
+        if(!_hasExecuted)
         {
-            GCDDebug(@"Data recieved from task stdout.\n%@",data);
-            if(!_hasExecuted)
-            {
-                if(launched)
-                    launched();
-                
-                _hasExecuted = TRUE;
-            }
-            
-            if(stdOut)
-            {
-                stdOut(data);
-            }
-            [outHandle waitForDataInBackgroundAndNotify];
+            if(launched)
+                launched();
+            _hasExecuted = TRUE;
         }
-        else /* No data object means the pipe is closed generally, meaning execution is over. */
+        
+        if(estimatedBlockSize == 0 && ![executingTask isRunning])
         {
-            /* Remove observers and call exit. */
-            [[NSNotificationCenter defaultCenter] removeObserver:stdoutObserver];
-            [[NSNotificationCenter defaultCenter] removeObserver:stderrObserver];
-
             if(exit)
             {
                 exit();
-                _hasExecuted = FALSE;
             }
-            stdoutObserver = nil; // Force ARC dealloc/cleanup.
-        }
-    }];
-    
-    /* This is basically copy/paste of stdout sending. */
-    stderrObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSFileHandleDataAvailableNotification object:[stderrPipe fileHandleForReading] queue:nil usingBlock:^(NSNotification *note)
-                      {
-                          NSFileHandle* errHandle = (NSFileHandle*) [note object];
-                          NSData* data = [errHandle availableData];
-                          
-                          if([data length])
-                          {
-                              GCDDebug(@"Data recieved from task stderr.\n%@",data);
+            _hasExecuted = FALSE;
+            dispatch_source_cancel(_stdoutSource);
+            dispatch_source_cancel(_stderrSource);
 
-                              if(stdErr)
-                              {
-                                  stdErr(data);
-                              }
-                              [errHandle waitForDataInBackgroundAndNotify];
-                          }
-                          else
-                          {
-                          }
-                      }];
-    [[stdoutPipe fileHandleForReading] waitForDataInBackgroundAndNotify];
-    [[stderrPipe fileHandleForReading] waitForDataInBackgroundAndNotify];
+        }
+        
+        while(true)
+        {
+            char buffer[estimatedBlockSize + GCDTASK_BUFFER_MAX];
+            bytesRead = read((int)dispatch_source_get_handle(_stdoutSource), buffer, estimatedBlockSize + GCDTASK_BUFFER_MAX);
+            if(bytesRead == 0)
+            {
+                break;
+            }
+            if (bytesRead != -1)
+            {
+                if(stdOut)
+                {
+                    stdOut([NSData dataWithBytes:buffer length:bytesRead]);
+                }
+                break;
+            }
+        }
+    });
+    
+    /* Same thing for stderr. */
+    dispatch_source_set_event_handler(_stderrSource, ^ {
+        size_t estimatedBlockSize = dispatch_source_get_data(_stderrSource);
+        ssize_t bytesRead;
+        
+        while(true)
+        {
+            char buffer[estimatedBlockSize + GCDTASK_BUFFER_MAX];
+            bytesRead = read((int)dispatch_source_get_handle(_stdoutSource), buffer, estimatedBlockSize + GCDTASK_BUFFER_MAX);
+            if(bytesRead == 0)
+            {
+                break;
+            }
+            if (bytesRead != -1)
+            {
+                if(stdErr)
+                {
+                    stdErr([NSData dataWithBytes:buffer length:bytesRead]);
+                }
+                break;
+            }
+        }
+    });
+
+    
+    dispatch_resume(_stdoutSource);
     [executingTask launch];
 }
 

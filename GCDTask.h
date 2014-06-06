@@ -22,12 +22,15 @@
     NSTask* executingTask;
     id stdoutObserver;
     id stderrObserver;
-    NSRunLoop* taskRunLoop;
 }
 
 @property NSString* launchPath;
 @property NSArray* arguments;
 @property BOOL hasExecuted;
+@property __block dispatch_source_t stdoutSource;
+@property __block dispatch_source_t stderrSource;
+
+
 
 - (void) launchWithOutputBlock: (void (^)(NSData* stdOutData)) stdOut
                 andErrorBlock: (void (^)(NSData* stdErrData)) stdErr
