@@ -37,7 +37,22 @@
         @throw [NSException exceptionWithName:@"GCDTASK_INVALID_EXECUTABLE" reason:@"There is no executable at the path set." userInfo:nil];
     }
 
-    /* Set arguments. */
+    /* Clean then set arguments. */
+    for (id arg in _arguments)
+    {
+        if([arg class] != [NSString class])
+        {
+            NSMutableArray* cleanedArray = [[NSMutableArray alloc] init];
+            /* Clean up required! */
+            for (id arg in _arguments)
+            {
+                [cleanedArray addObject:[NSString stringWithFormat:@"%@",arg]];
+            }
+            [self setArguments:cleanedArray];
+            break;
+        }
+    }
+
     [executingTask setArguments:_arguments];
     
     
