@@ -52,7 +52,7 @@
     
     [executingTask setStandardInput:stdinPipe];
     [executingTask setStandardOutput:stdoutPipe];
-    [executingTask setStandardError:stdoutPipe];
+    [executingTask setStandardError:stderrPipe];
     
     /* Set current directory, just pass on our actual CWD. */
     /* TODO: Potentially make this changeable? Surely there's probably a nicer way to get the CWD too. */
