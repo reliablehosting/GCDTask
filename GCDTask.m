@@ -6,9 +6,14 @@
 //
 
 #import "GCDTask.h"
-#define GCDTASK_BUFFER_MAX 1024
+#define GCDTASK_BUFFER_MAX 4096
 
 @implementation GCDTask
+
+- (id) init
+{
+    return [super init];
+}
 
 - (void) launchWithOutputBlock: (void (^)(NSData* stdOutData)) stdOut
                  andErrorBlock: (void (^)(NSData* stdErrData)) stdErr
@@ -69,73 +74,88 @@
     
     /* Set stdout source event handler to read data and send it out. */
     dispatch_source_set_event_handler(_stdoutSource, ^ {
-        size_t estimatedBlockSize = dispatch_source_get_data(_stdoutSource);
+        void* buffer = malloc(GCDTASK_BUFFER_MAX);
         ssize_t bytesRead;
         
-        if(!_hasExecuted)
+        do
         {
-            if(launched)
-                launched();
-            _hasExecuted = TRUE;
-        }
+            errno = 0;
+            bytesRead = read([stdoutPipe fileHandleForReading].fileDescriptor, buffer, GCDTASK_BUFFER_MAX);
+        } while(bytesRead == -1 && errno == EINTR);
         
-        if(estimatedBlockSize == 0 && ![executingTask isRunning])
+        if(bytesRead > 0)
         {
-            if(exit)
-            {
-                exit();
-            }
-            _hasExecuted = FALSE;
-            dispatch_source_cancel(_stdoutSource);
-            dispatch_source_cancel(_stderrSource);
-
-        }
-        
-        while(true)
-        {
-            char buffer[estimatedBlockSize + GCDTASK_BUFFER_MAX];
-            bytesRead = read((int)dispatch_source_get_handle(_stdoutSource), buffer, estimatedBlockSize + GCDTASK_BUFFER_MAX);
-            if(bytesRead == 0)
-            {
-                break;
-            }
-            if (bytesRead != -1)
-            {
+            // Create before dispatch to prevent a race condition.
+            NSData* dataToPass = [NSData dataWithBytes:buffer length:bytesRead];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if(!_hasExecuted)
+                {
+                    if(launched)
+                        launched();
+                    _hasExecuted = TRUE;
+                }
                 if(stdOut)
                 {
-                    stdOut([NSData dataWithBytes:buffer length:bytesRead]);
+                    stdOut(dataToPass);
                 }
-                break;
-            }
+            });
         }
+        
+        if(errno != 0 && bytesRead <= 0)
+        {
+            dispatch_source_cancel(_stdoutSource);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if(exit)
+                    exit();
+            });
+        }
+
+        
+        free(buffer);
     });
     
     /* Same thing for stderr. */
     dispatch_source_set_event_handler(_stderrSource, ^ {
-        size_t estimatedBlockSize = dispatch_source_get_data(_stderrSource);
+        void* buffer = malloc(GCDTASK_BUFFER_MAX);
         ssize_t bytesRead;
         
-        while(true)
+        do
         {
-            char buffer[estimatedBlockSize + GCDTASK_BUFFER_MAX];
-            bytesRead = read((int)dispatch_source_get_handle(_stdoutSource), buffer, estimatedBlockSize + GCDTASK_BUFFER_MAX);
-            if(bytesRead == 0)
-            {
-                break;
-            }
-            if (bytesRead != -1)
-            {
+            errno = 0;
+            bytesRead = read([stderrPipe fileHandleForReading].fileDescriptor, buffer, GCDTASK_BUFFER_MAX);
+        } while(bytesRead == -1 && errno == EINTR);
+        
+        if(bytesRead > 0)
+        {
+            NSData* dataToPass = [NSData dataWithBytes:buffer length:bytesRead];
+            dispatch_async(dispatch_get_main_queue(), ^{
                 if(stdErr)
                 {
-                    stdErr([NSData dataWithBytes:buffer length:bytesRead]);
+                    stdErr(dataToPass);
                 }
-                break;
-            }
+            });
         }
+        
+        if(errno != 0 && bytesRead <= 0)
+        {
+            dispatch_source_cancel(_stderrSource);
+        }
+        
+        free(buffer);
     });
 
     
     dispatch_resume(_stdoutSource);
+    dispatch_resume(_stderrSource);
+
+    executingTask.terminationHandler = ^(NSTask* task)
+    {
+        dispatch_source_cancel(_stdoutSource);
+        dispatch_source_cancel(_stderrSource);
+        if(exit)
+            exit();
+    };
+
     [executingTask launch];
 }
 
@@ -164,6 +184,16 @@
     NSMutableArray* temp = [NSMutableArray arrayWithArray:_arguments];
     [temp addObject:argument];
     [self setArguments:temp];
+}
+
+- (void) RequestTermination
+{
+    /* Ask nicely for SIGINT, then SIGTERM. */
+    [executingTask interrupt];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^(void)
+    {
+        [executingTask terminate];
+    });
 }
 
 

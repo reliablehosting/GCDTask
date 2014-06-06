@@ -24,8 +24,8 @@
     id stderrObserver;
 }
 
-@property NSString* launchPath;
-@property NSArray* arguments;
+@property (strong) NSString* launchPath;
+@property (strong) NSArray* arguments;
 @property BOOL hasExecuted;
 @property __block dispatch_source_t stdoutSource;
 @property __block dispatch_source_t stderrSource;
@@ -40,6 +40,6 @@
 - (BOOL) WriteStringToStandardInput: (NSString*) input;
 - (BOOL) WriteDataToStandardInput: (NSData*) input;
 - (void) AddArgument: (NSString*) argument;
-
+- (void) RequestTermination;
 
 @end
