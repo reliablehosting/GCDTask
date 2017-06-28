@@ -18,7 +18,7 @@
 - (void) launchWithOutputBlock: (void (^)(NSData* stdOutData)) stdOut
                  andErrorBlock: (void (^)(NSData* stdErrData)) stdErr
                       onLaunch: (void (^)()) launched
-                        onExit: (void (^)()) exit
+                        onExit: (void (^)(int)) exit
 {
     executingTask = [[NSTask alloc] init];
  
@@ -106,7 +106,7 @@
             dispatch_source_cancel(_stdoutSource);
             dispatch_async(dispatch_get_main_queue(), ^{
                 if(exit)
-                    exit();
+                    exit([executingTask terminationStatus]);
             });
         }
 
@@ -153,7 +153,7 @@
         dispatch_source_cancel(_stdoutSource);
         dispatch_source_cancel(_stderrSource);
         if(exit)
-            exit();
+            exit([executingTask terminationStatus]);
     };
 
     [executingTask launch];
