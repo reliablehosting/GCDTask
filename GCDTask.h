@@ -35,7 +35,7 @@
 - (void) launchWithOutputBlock: (void (^)(NSData* stdOutData)) stdOut
                 andErrorBlock: (void (^)(NSData* stdErrData)) stdErr
                      onLaunch: (void (^)()) launched
-                       onExit: (void (^)()) exit;
+                       onExit: (void (^)(int)) exit;
 
 - (BOOL) WriteStringToStandardInput: (NSString*) input;
 - (BOOL) WriteDataToStandardInput: (NSData*) input;
