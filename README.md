@@ -21,8 +21,8 @@ Example usage:
         NSLog(@"ERR: %@", output);
     } onLaunch:^{
         NSLog(@"Task has started running.");
-    } onExit:^{
-        NSLog(@"Task has now quit.");
+    } onExit:^(int exitStatus) {
+        NSLog(@"Task has now quit. Exit status %d",exitStatus);
     }];
 
 ```
