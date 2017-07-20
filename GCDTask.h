@@ -26,6 +26,7 @@
 
 @property (strong) NSString* launchPath;
 @property (strong) NSArray* arguments;
+@property (strong) NSDictionary* environment;
 @property BOOL hasExecuted;
 @property __block dispatch_source_t stdoutSource;
 @property __block dispatch_source_t stderrSource;
@@ -35,7 +36,7 @@
 - (void) launchWithOutputBlock: (void (^)(NSData* stdOutData)) stdOut
                 andErrorBlock: (void (^)(NSData* stdErrData)) stdErr
                      onLaunch: (void (^)()) launched
-                       onExit: (void (^)()) exit;
+                       onExit: (void (^)(int)) exit;
 
 - (BOOL) WriteStringToStandardInput: (NSString*) input;
 - (BOOL) WriteDataToStandardInput: (NSData*) input;
