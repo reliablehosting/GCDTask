@@ -18,7 +18,7 @@
 - (void) launchWithOutputBlock: (void (^)(NSData* stdOutData)) stdOut
                  andErrorBlock: (void (^)(NSData* stdErrData)) stdErr
                       onLaunch: (void (^)()) launched
-                        onExit: (void (^)()) exit
+                        onExit: (void (^)(int)) exit
 {
     executingTask = [[NSTask alloc] init];
  
@@ -46,9 +46,12 @@
         }
     }
     
-    
     [executingTask setArguments:_arguments];
-    
+
+    /* Add Environment variables */
+    if (_environment) {
+        [executingTask setEnvironment:_environment];
+    }
     
     /* Setup pipes */
     stdinPipe = [NSPipe pipe];
@@ -106,7 +109,7 @@
             dispatch_source_cancel(_stdoutSource);
             dispatch_async(dispatch_get_main_queue(), ^{
                 if(exit)
-                    exit();
+                    exit([executingTask terminationStatus]);
             });
         }
 
@@ -153,7 +156,7 @@
         dispatch_source_cancel(_stdoutSource);
         dispatch_source_cancel(_stderrSource);
         if(exit)
-            exit();
+            exit([executingTask terminationStatus]);
     };
 
     [executingTask launch];
